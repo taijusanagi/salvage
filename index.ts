@@ -9,8 +9,8 @@ import { v4 as uuidv4 } from "uuid";
 import { abi } from "./abi";
 
 const GWEI = ethers.BigNumber.from(10).pow(9);
-const PRIORITY_FEE = GWEI.mul(4);
-const BLOCKS_IN_THE_FUTURE = 2;
+const PRIORITY_FEE = GWEI.mul(100);
+const BLOCKS_IN_THE_FUTURE = 10;
 
 const main = async () => {
   const chainId = Number(process.env.CHAIN_ID);
@@ -43,6 +43,7 @@ const main = async () => {
   console.log("chainId", chainId);
   console.log("ethereumRpcUrl", ethereumRpcUrl);
   console.log("bundleRelayUrl", bundleRelayUrl);
+  console.log("contractAddress", contractAddress);
   console.log("authSigner.address", authSigner.address);
   console.log("fundingSigner.address", fundingSigner.address);
   console.log("exploitSigner.address", exploitSigner.address);
@@ -73,7 +74,7 @@ const main = async () => {
   // return;
   // provider.on("block", async (blockNumber) => {
 
-  return;
+  // return;
 
   const run = async () => {
     console.log("run");
@@ -96,11 +97,11 @@ const main = async () => {
     const maxFeePerGas = PRIORITY_FEE.add(maxBaseFeeInFutureBlock);
     console.log("maxFeePerGas", maxFeePerGas.toString());
 
-    const withdrawTransaction = {
+    const releaseTransaction = {
       to: contract.address,
       type: 2,
       maxPriorityFeePerGas: PRIORITY_FEE,
-      maxFeePerGas: maxFeePerGas,
+      maxFeePerGas,
       gasLimit: gasLimit,
       data: releaseTxdata,
       chainId: chainId,
@@ -109,7 +110,7 @@ const main = async () => {
       to: exploitSigner.address,
       type: 2,
       maxPriorityFeePerGas: PRIORITY_FEE,
-      maxFeePerGas: maxFeePerGas,
+      maxFeePerGas,
       gasLimit: 21000,
       data: "0x",
       value: maxFeePerGas.mul(21000),
@@ -119,7 +120,7 @@ const main = async () => {
       to: recipientAddress,
       type: 2,
       maxPriorityFeePerGas: PRIORITY_FEE,
-      maxFeePerGas: maxFeePerGas,
+      maxFeePerGas,
       gasLimit: 21000,
       data: "0x",
       value: paymentToExploitSigner,
@@ -128,7 +129,7 @@ const main = async () => {
     const transactions = [
       {
         signer: fundingSigner,
-        transaction: withdrawTransaction,
+        transaction: releaseTransaction,
       },
       {
         signer: fundingSigner,
@@ -149,6 +150,8 @@ const main = async () => {
     } else {
       console.log(`Simulation Success: ${JSON.stringify(simulation, null, 2)}`);
     }
+
+    // return;
 
     const bundleSubmission = await flashbotsProvider.sendRawBundle(signedTransactions, targetBlock, {
       replacementUuid,
