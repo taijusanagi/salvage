@@ -6,17 +6,14 @@ import { ethers } from "ethers";
 import { FlashbotsBundleProvider, FlashbotsBundleResolution } from "@flashbots/ethers-provider-bundle";
 import { v4 as uuidv4 } from "uuid";
 
-import { Alchemy, Network } from "alchemy-sdk";
-
 import { abi } from "./abi";
 
 const GWEI = ethers.BigNumber.from(10).pow(9);
-// const PRIORITY_FEE = GWEI.mul(3);
-const BLOCKS_IN_THE_FUTURE = 20;
+const PRIORITY_FEE = GWEI.mul(4);
+const BLOCKS_IN_THE_FUTURE = 2;
 
 const main = async () => {
   const chainId = Number(process.env.CHAIN_ID);
-  const alchemyApiKey = process.env.ALCHEMY_API_KEY || "";
   const ethereumRpcUrl = process.env.ETHEREUM_RPC_URL || "";
   const bundleRelayUrl = process.env.BUNDLE_RELAY_URL || "";
   const contractAddress = process.env.CONTRACT_ADDRESS || "";
@@ -27,7 +24,6 @@ const main = async () => {
 
   if (
     !chainId ||
-    !alchemyApiKey ||
     !ethereumRpcUrl ||
     !bundleRelayUrl ||
     !contractAddress ||
@@ -40,15 +36,6 @@ const main = async () => {
   }
 
   const provider = new ethers.providers.JsonRpcProvider(ethereumRpcUrl);
-
-  const config = {
-    apiKey: alchemyApiKey,
-    network: chainId == 1 ? Network.ETH_MAINNET : Network.ETH_SEPOLIA,
-  };
-
-  // Creates an Alchemy object instance with the config to use for making requests
-  const alchemy = new Alchemy(config);
-
   const authSigner = new ethers.Wallet(authSignerPrivateKey);
   const fundingSigner = new ethers.Wallet(fundingSignerPrivateKey);
   const exploitSigner = new ethers.Wallet(exploitSignerPrivateKey);
@@ -60,10 +47,6 @@ const main = async () => {
   console.log("fundingSigner.address", fundingSigner.address);
   console.log("exploitSigner.address", exploitSigner.address);
   console.log("recipientAddress", recipientAddress);
-
-  // console.log(PRIORITY_FEE.toString());
-
-  // return;
 
   const flashbotsProvider = await FlashbotsBundleProvider.create(provider, authSigner, bundleRelayUrl);
   const userStats = flashbotsProvider.getUserStatsV2();
@@ -89,11 +72,13 @@ const main = async () => {
   console.log("gasLimit", gasLimit.toString());
   // return;
   // provider.on("block", async (blockNumber) => {
+
+  return;
+
   const run = async () => {
     console.log("run");
     const block = await provider.getBlock("latest");
     console.log("block.number", block.number);
-    // console.log(block);
 
     const replacementUuid = uuidv4();
     console.log("replacementUuid", replacementUuid);
@@ -108,26 +93,33 @@ const main = async () => {
     );
     console.log("maxBaseFeeInFutureBlock", maxBaseFeeInFutureBlock.toString());
 
-    const maxPriorityFeePerGas = await alchemy.transact.getMaxPriorityFeePerGas();
-    const maxFeePerGas = maxBaseFeeInFutureBlock.add(maxPriorityFeePerGas).sub(1);
-
-    console.log("maxPriorityFeePerGas", maxPriorityFeePerGas.toString());
+    const maxFeePerGas = PRIORITY_FEE.add(maxBaseFeeInFutureBlock);
     console.log("maxFeePerGas", maxFeePerGas.toString());
 
     const withdrawTransaction = {
       to: contract.address,
       type: 2,
-      maxPriorityFeePerGas,
-      maxFeePerGas,
+      maxPriorityFeePerGas: PRIORITY_FEE,
+      maxFeePerGas: maxFeePerGas,
       gasLimit: gasLimit,
       data: releaseTxdata,
+      chainId: chainId,
+    };
+    const fundingGasTransaction = {
+      to: exploitSigner.address,
+      type: 2,
+      maxPriorityFeePerGas: PRIORITY_FEE,
+      maxFeePerGas: maxFeePerGas,
+      gasLimit: 21000,
+      data: "0x",
+      value: maxFeePerGas.mul(21000),
       chainId: chainId,
     };
     const rescueTransaction = {
       to: recipientAddress,
       type: 2,
-      maxPriorityFeePerGas,
-      maxFeePerGas,
+      maxPriorityFeePerGas: PRIORITY_FEE,
+      maxFeePerGas: maxFeePerGas,
       gasLimit: 21000,
       data: "0x",
       value: paymentToExploitSigner,
@@ -137,6 +129,10 @@ const main = async () => {
       {
         signer: fundingSigner,
         transaction: withdrawTransaction,
+      },
+      {
+        signer: fundingSigner,
+        transaction: fundingGasTransaction,
       },
       {
         transaction: rescueTransaction,
